@@ -1,0 +1,210 @@
+---
+title: "BMI Final Project Supplementary File"
+author: "Five Guys"
+subtitle: ''
+output:
+  pdf_document:
+    highlight: tango
+    number_sections: no
+    toc: yes
+    toc_depth: '4'
+    df_print: kable
+  html_document:
+    code_folding: hide
+    highlight: textmate
+    number_sections: yes
+    theme: cosmo
+    toc: yes
+    toc_depth: 4
+    toc_float: no
+  word_document:
+    toc: yes
+    toc_depth: '4'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(message = FALSE, warning = FALSE, comment = "",tidy.opts=list(width.cutoff=80),tidy=TRUE)
+library(tidyverse)
+library(lubridate)
+library(stringr)
+library(RColorBrewer)
+library(scales)
+library(rio)
+library(forcats)
+library(ggrepel)
+
+theme_set(theme_minimal() +
+  theme(axis.line.y.left = element_line(),
+        axis.line.x.bottom = element_line()))
+spColors<-c(brewer.pal(7, "Dark2"))
+swColors<-c(brewer.pal(12, "Paired"))
+
+`%not_in%` <- purrr::negate(`%in%`)
+```
+
+
+# Workflow Diagram
+
+![Project workflow](picture2.png)
+
+
+Please see methods section for detailed overview of the project workflow.
+\newpage
+# Cases vs Controls R
+
+```{r, echo=F}
+control<-read_csv("Ryans_files/mel.norm.csv")
+```
+
+## Volcano Plot
+
+```{r}
+ggplot(data=control, aes(x=log2fc, y=padj)) + 
+  geom_jitter(alpha=0.5)+
+  ggtitle("Control")+
+  xlab("Log2 FC")+
+  ylab("Adjusted P value")+
+  ggsave("case_v_con_volcano.png", width=10, height=6)
+```
+
+## Up vs Down Regulated Plot
+
+```{r}
+tab_con<-control%>%
+  mutate(newdiff = ifelse((log2fc > 2 & padj < 0.05), "Up", 
+                          ifelse((log2fc < -2 & padj < 0.05), "Down", "lowdiff")))%>%
+  mutate(abslog2fc = abs(log2fc))%>%
+  filter(newdiff!="lowdiff")%>%
+  group_by(newdiff)%>%
+  slice_max(n=5, order_by=abslog2fc)%>%
+  select(Position=X1, geneID, idlabel, log2fc, padj, direction=newdiff)
+
+control%>%
+  mutate(newdiff = ifelse((log2fc > 2 & padj < 0.05), "Up", 
+                          ifelse((log2fc < -2 & padj < 0.05), "Down", "Low-diff")))%>%
+  mutate(newidlabel=ifelse(idlabel %in% tab_con$idlabel, idlabel, NA))%>%
+  ggplot(aes(x=log2fc, y=-log10(padj), col=newdiff, label=newidlabel)) + 
+  geom_point(aes(alpha=log10(padj)), show.legend=F) + 
+  geom_vline(xintercept=c(-2, 2), col="black", linetype = "dashed") +
+  geom_hline(yintercept=-log10(0.05), col="black", linetype = "dashed")+
+  annotate("label", x = -3.5, y = 0, label = "Down Regulated", color="#ba3e14",fontface = "bold")+
+  annotate("label", x = 4, y = 0, label = "Up Regulated", color="#1333b0",fontface = "bold")+
+  ggrepel::geom_label_repel(min.segment.length = unit(0, 'lines'), show.legend=F)+
+  scale_color_manual(values=c("#ba3e14", "#b8bfb8", "#1333b0"))+
+  labs(title="Differential Gene Expression", subtitle="5 Control Samples and 5 Melanoma Samples")+
+  ylab("Negative Log Adjusted P value")+
+  xlab("Log base 2 FC")+
+  ylim(0,10)+
+  theme_minimal()
+  ggsave("case_v_con.png", width=10, height=6)
+```
+
+
+## Tabular Views
+
+```{r}
+tab_con<-control%>%
+  mutate(newdiff = ifelse((log2fc > 2 & padj < 0.05), "Up", 
+                          ifelse((log2fc < -2 & padj < 0.05), "Down", "lowdiff")))%>%
+  mutate(abslog2fc = abs(log2fc))%>%
+  filter(newdiff!="lowdiff")%>%
+  group_by(newdiff)%>%
+  slice_max(n=5, order_by=abslog2fc)%>%
+  select(Position=X1, geneID, idlabel, log2fc, padj, direction=newdiff)
+tab_con%>%
+  filter(direction=="Down")
+
+tab_con%>%
+  filter(direction=="Up")
+```
+
+
+```{r}
+control%>%
+  mutate(newdiff = ifelse((log2fc > 2 & padj < 0.05), "Up", 
+                          ifelse((log2fc < -2 & padj < 0.05), "Down", "lowdiff")))%>%
+  mutate(abslog2fc = abs(log2fc))%>%
+  dplyr::group_by(newdiff)%>%
+  dplyr::summarize(count=n())%>%
+  tidyr::pivot_wider(names_from=newdiff, values_from=count)%>%
+  select(Down, `No Significant Change`=lowdiff, Up)
+```
+
+# Good vs Bad Prognosis R
+
+```{r, echo=F}
+cases<-read_csv("Ryans_files/melanoma1.csv")
+```
+
+## Volcano Plot
+
+```{r}
+ggplot(data=cases, aes(x=log2fc, y=padj)) + 
+  geom_jitter(alpha=0.5)+
+  ggtitle("Cases")+
+  xlab("Log2 FC")+
+  ylab("Adjusted P value")+
+  ggsave("bad_v_good_volcano.png", width=10, height=6)
+```
+
+## Up vs Down Regulated Plot
+
+```{r}
+tab_case<-cases%>%
+  mutate(newdiff = ifelse((log2fc > 2 & padj < 0.05), "Up", 
+                          ifelse((log2fc < -2 & padj < 0.05), "Down", "lowdiff")))%>%
+  mutate(abslog2fc = abs(log2fc))%>%
+  filter(newdiff!="lowdiff")%>%
+  group_by(newdiff)%>%
+  slice_max(n=5, order_by=abslog2fc)%>%
+  select(Position=X1, geneID, idlabel, log2fc, padj, direction=newdiff)
+
+cases%>%
+  mutate(newdiff = ifelse((log2fc > 2 & padj < 0.05), "Up", 
+                          ifelse((log2fc < -2 & padj < 0.05), "Down", "Low-diff")))%>%
+  mutate(newidlabel=ifelse(idlabel %in% tab_case$idlabel, idlabel, NA))%>%
+  ggplot(aes(x=log2fc, y=-log10(padj), col=newdiff, label=newidlabel)) + 
+  geom_point(aes(alpha=log10(padj)), show.legend=F) + 
+  geom_vline(xintercept=c(-2, 2), col="black", linetype = "dashed") +
+  geom_hline(yintercept=-log10(0.05), col="black", linetype = "dashed")+
+  annotate("label", x = -3.5, y = 40, label = "Down Regulated", color="#ba3e14", fontface = "bold")+
+  annotate("label", x = 3.25, y = 40, label = "Up Regulated", color="#1333b0", fontface = "bold")+
+  ggrepel::geom_label_repel(min.segment.length = unit(0, 'lines'), box.padding=0.65, show.legend=F)+
+  scale_color_manual(values=c("#ba3e14", "#b8bfb8", "#1333b0"))+
+  labs(title="Differential Gene Expression in Melanoma Patients", subtitle="Bad Prognosis vs Good Prognosis")+
+  ylab("Negative Log Adjusted P value")+
+  xlab("Log base 2 FC")+
+  ylim(0,40)+
+  theme_minimal()+
+  ggsave("bad_v_good.png", width=10, height=6)
+```
+
+
+## Tabular Views
+
+```{r}
+
+tab_case%>%
+  filter(direction=="Down")
+
+tab_case%>%
+  filter(direction=="Up")
+```
+
+
+```{r}
+cases%>%
+  mutate(newdiff = ifelse((log2fc > 2 & padj < 0.05), "Up", 
+                          ifelse((log2fc < -2 & padj < 0.05), "Down", "lowdiff")))%>%
+  mutate(abslog2fc = abs(log2fc))%>%
+  dplyr::group_by(newdiff)%>%
+  dplyr::summarize(count=n())%>%
+  tidyr::pivot_wider(names_from=newdiff, values_from=count)%>%
+  select(Down, `No Significant Change`=lowdiff, Up)
+```
+
+
+
+
+
+
